@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>横スクロールテスト</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#111;color:#fff;font-family:system-ui}
+#game{position:fixed;inset:0;width:100vw;height:100vh;background:#7dd3fc;touch-action:none}
+#ui{position:fixed;left:10px;top:10px;z-index:10;background:rgba(0,0,0,.5);padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.6}
+#controls{position:fixed;left:0;right:0;bottom:18px;z-index:20;display:flex;justify-content:space-between;padding:0 18px;pointer-events:none}
+.pad,.btns{display:flex;gap:12px;pointer-events:auto}
+.ctrl{width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,.5);background:rgba(0,0,0,.45);color:white;font-weight:900}
+.big{width:76px;height:76px}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">← → / A D：移動<br>Space / ↑：ジャンプ<br>J：攻撃<br>画像：play/playhoko.png / play/playatk.png</div>
+<div id="controls">
+  <div class="pad"><button class="ctrl" id="leftBtn">←</button><button class="ctrl" id="rightBtn">→</button></div>
+  <div class="btns"><button class="ctrl big" id="jumpBtn">JUMP</button><button class="ctrl big" id="atkBtn">ATK</button></div>
+</div>
+<script>
+'use strict';
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+function resize(){
+  canvas.width=Math.floor(innerWidth*devicePixelRatio);
+  canvas.height=Math.floor(innerHeight*devicePixelRatio);
+  canvas.style.width=innerWidth+'px';
+  canvas.style.height=innerHeight+'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+addEventListener('resize',resize);resize();
+
+const imgs={};
+function loadImage(k,src){
+  return new Promise(r=>{
+    const img=new Image();
+    img.onload=()=>{imgs[k]=img;r()};
+    img.onerror=()=>{console.warn('画像読み込み失敗',src);r()};
+    img.src=src;
+  });
+}
+
+const keys={left:false,right:false,jump:false,attack:false};
+addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=true;
+  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=true;
+  if(e.key===' '||e.key==='ArrowUp'||e.key==='w'||e.key==='W')keys.jump=true;
+  if(e.key==='j'||e.key==='J')keys.attack=true;
+});
+addEventListener('keyup',e=>{
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=false;
+  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=false;
+  if(e.key===' '||e.key==='ArrowUp'||e.key==='w'||e.key==='W')keys.jump=false;
+  if(e.key==='j'||e.key==='J')keys.attack=false;
+});
+function bind(id,k){
+  const b=document.getElementById(id);
+  b.onpointerdown=e=>{e.preventDefault();keys[k]=true;b.setPointerCapture(e.pointerId)};
+  b.onpointerup=e=>{e.preventDefault();keys[k]=false};
+  b.onpointercancel=()=>keys[k]=false;
+  b.onpointerleave=()=>keys[k]=false;
+}
+bind('leftBtn','left');bind('rightBtn','right');bind('jumpBtn','jump');bind('atkBtn','attack');
+
+const player={x:160,y:0,vx:0,vy:0,w:150,h:150,dir:1,onGround:false,state:'idle',frame:0,anim:0,attackTime:0};
+const camera={x:0};
+const worldW=2600;
+const groundY=()=>innerHeight-110;
+
+function frameRect(frame,img){
+  const fw=img.width/2, fh=img.height/2;
+  const col=frame%2, row=Math.floor(frame/2);
+  return {sx:col*fw,sy:row*fh,sw:fw,sh:fh};
+}
+
+function update(dt){
+  const speed=270,gravity=1450,jump=640;
+  let ix=0;if(keys.left)ix--;if(keys.right)ix++;
+  if(ix){player.vx=ix*speed;player.dir=ix>0?1:-1}else{player.vx*=.82;if(Math.abs(player.vx)<5)player.vx=0}
+  if(keys.jump&&player.onGround){player.vy=-jump;player.onGround=false}
+  if(keys.attack&&player.attackTime<=0){player.attackTime=.45;player.frame=0;player.anim=0}
+  player.attackTime=Math.max(0,player.attackTime-dt);
+  player.state=player.attackTime>0?'attack':(Math.abs(player.vx)>20?'walk':'idle');
+  player.vy+=gravity*dt;player.x+=player.vx*dt;player.y+=player.vy*dt;
+  const gy=groundY();
+  if(player.y+player.h>=gy){player.y=gy-player.h;player.vy=0;player.onGround=true}
+  player.x=Math.max(40,Math.min(worldW-180,player.x));
+  player.anim+=dt;
+  const fps=player.state==='attack'?10:(player.state==='walk'?8:4);
+  if(player.anim>1/fps){player.anim=0;player.frame=(player.frame+1)%4}
+  camera.x=Math.max(0,Math.min(worldW-innerWidth,player.x-innerWidth*.42));
+}
+function drawBg(){
+  const w=innerWidth,h=innerHeight,gx=-camera.x;
+  const sky=ctx.createLinearGradient(0,0,0,h);
+  sky.addColorStop(0,'#7dd3fc');sky.addColorStop(.55,'#dbeafe');sky.addColorStop(.56,'#84cc16');sky.addColorStop(1,'#365314');
+  ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='rgba(255,255,255,.65)';
+  for(let i=0;i<8;i++){const x=(i*360+120+gx*.25)%(w+420)-220,y=70+(i%3)*44;ctx.beginPath();ctx.ellipse(x,y,70,24,0,0,Math.PI*2);ctx.ellipse(x+48,y+8,48,18,0,0,Math.PI*2);ctx.ellipse(x-45,y+6,45,16,0,0,Math.PI*2);ctx.fill()}
+  ctx.fillStyle='#4d7c0f';ctx.fillRect(gx,groundY(),worldW,110);
+  ctx.fillStyle='#713f12';for(let x=0;x<worldW;x+=160)ctx.fillRect(gx+x,groundY()+20,110,18);
+  ctx.fillStyle='#1f2937';for(let x=420;x<worldW;x+=520){ctx.fillRect(gx+x,groundY()-60,180,60);ctx.fillStyle='#374151';ctx.fillRect(gx+x+14,groundY()-90,152,34);ctx.fillStyle='#1f2937'}
+}
+function drawPlayer(){
+  const img=player.state==='attack'?imgs.attack:imgs.walk;
+  if(!img){ctx.fillStyle='#111827';ctx.fillRect(player.x-camera.x,player.y,player.w,player.h);return}
+  const f=frameRect(player.frame,img);
+  const drawW=player.state==='attack'?player.w*1.65:player.w;
+  const drawH=player.state==='attack'?player.h*1.18:player.h;
+  const footY=player.y+player.h;
+  const dx=player.x-camera.x-(drawW-player.w)/2;
+  const dy=footY-drawH;
+  ctx.save();
+  if(player.dir<0){ctx.translate(dx+drawW,dy);ctx.scale(-1,1);ctx.drawImage(img,f.sx,f.sy,f.sw,f.sh,0,0,drawW,drawH)}
+  else ctx.drawImage(img,f.sx,f.sy,f.sw,f.sh,dx,dy,drawW,drawH);
+  ctx.restore();
+}
+let last=performance.now();
+function loop(now){const dt=Math.min(.033,(now-last)/1000);last=now;update(dt);drawBg();drawPlayer();requestAnimationFrame(loop)}
+Promise.all([loadImage('walk','play/playhoko.png'),loadImage('attack','play/playatk.png')]).then(()=>{player.y=groundY()-player.h;requestAnimationFrame(loop)});
+</script>
+</body>
+</html>
