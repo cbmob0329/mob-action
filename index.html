@@ -1,128 +1,23 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<title>横スクロールテスト</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
-html,body{width:100%;height:100%;overflow:hidden;background:#111;color:#fff;font-family:system-ui}
-#game{position:fixed;inset:0;width:100vw;height:100vh;background:#7dd3fc;touch-action:none}
-#ui{position:fixed;left:10px;top:10px;z-index:10;background:rgba(0,0,0,.5);padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.6}
-#controls{position:fixed;left:0;right:0;bottom:18px;z-index:20;display:flex;justify-content:space-between;padding:0 18px;pointer-events:none}
-.pad,.btns{display:flex;gap:12px;pointer-events:auto}
-.ctrl{width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,.5);background:rgba(0,0,0,.45);color:white;font-weight:900}
-.big{width:76px;height:76px}
-</style>
-</head>
-<body>
-<canvas id="game"></canvas>
-<div id="ui">← → / A D：移動<br>Space / ↑：ジャンプ<br>J：攻撃<br>画像：play/playhoko.png / play/playatk.png</div>
-<div id="controls">
-  <div class="pad"><button class="ctrl" id="leftBtn">←</button><button class="ctrl" id="rightBtn">→</button></div>
-  <div class="btns"><button class="ctrl big" id="jumpBtn">JUMP</button><button class="ctrl big" id="atkBtn">ATK</button></div>
-</div>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"><title>横スクロール三連撃テスト</title><style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}html,body{width:100%;height:100%;overflow:hidden;background:#111;color:#fff;font-family:system-ui}#game{position:fixed;inset:0;width:100vw;height:100vh;background:#7dd3fc;touch-action:none}#ui{position:fixed;left:10px;top:10px;z-index:10;background:rgba(0,0,0,.55);padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.6}#controls{position:fixed;left:0;right:0;bottom:18px;z-index:20;display:flex;justify-content:space-between;padding:0 18px;pointer-events:none}.pad,.btns{display:flex;gap:12px;pointer-events:auto}.ctrl{width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,.5);background:rgba(0,0,0,.45);color:white;font-weight:900}.big{width:78px;height:78px}
+</style></head><body><canvas id="game"></canvas><div id="ui">← → / A D：移動<br>Space / ↑：ジャンプ<br>J / ■：通常攻撃（三連撃）<br>1: 突き / 2: 杖殴り赤残像 / 3: サンダーボルト<br>画像：play/playhoko.png / play/playatk.png / ef/efthunder.png</div><div id="controls"><div class="pad"><button class="ctrl" id="leftBtn">←</button><button class="ctrl" id="rightBtn">→</button></div><div class="btns"><button class="ctrl big" id="jumpBtn">JUMP</button><button class="ctrl big" id="atkBtn">■</button></div></div>
 <script>
 'use strict';
-const canvas=document.getElementById('game');
-const ctx=canvas.getContext('2d');
-function resize(){
-  canvas.width=Math.floor(innerWidth*devicePixelRatio);
-  canvas.height=Math.floor(innerHeight*devicePixelRatio);
-  canvas.style.width=innerWidth+'px';
-  canvas.style.height=innerHeight+'px';
-  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
-}
-addEventListener('resize',resize);resize();
-
-const imgs={};
-function loadImage(k,src){
-  return new Promise(r=>{
-    const img=new Image();
-    img.onload=()=>{imgs[k]=img;r()};
-    img.onerror=()=>{console.warn('画像読み込み失敗',src);r()};
-    img.src=src;
-  });
-}
-
-const keys={left:false,right:false,jump:false,attack:false};
-addEventListener('keydown',e=>{
-  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=true;
-  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=true;
-  if(e.key===' '||e.key==='ArrowUp'||e.key==='w'||e.key==='W')keys.jump=true;
-  if(e.key==='j'||e.key==='J')keys.attack=true;
-});
-addEventListener('keyup',e=>{
-  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=false;
-  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=false;
-  if(e.key===' '||e.key==='ArrowUp'||e.key==='w'||e.key==='W')keys.jump=false;
-  if(e.key==='j'||e.key==='J')keys.attack=false;
-});
-function bind(id,k){
-  const b=document.getElementById(id);
-  b.onpointerdown=e=>{e.preventDefault();keys[k]=true;b.setPointerCapture(e.pointerId)};
-  b.onpointerup=e=>{e.preventDefault();keys[k]=false};
-  b.onpointercancel=()=>keys[k]=false;
-  b.onpointerleave=()=>keys[k]=false;
-}
-bind('leftBtn','left');bind('rightBtn','right');bind('jumpBtn','jump');bind('atkBtn','attack');
-
-const player={x:160,y:0,vx:0,vy:0,w:150,h:150,dir:1,onGround:false,state:'idle',frame:0,anim:0,attackTime:0};
-const camera={x:0};
-const worldW=2600;
-const groundY=()=>innerHeight-110;
-
-function frameRect(frame,img){
-  const fw=img.width/2, fh=img.height/2;
-  const col=frame%2, row=Math.floor(frame/2);
-  return {sx:col*fw,sy:row*fh,sw:fw,sh:fh};
-}
-
-function update(dt){
-  const speed=270,gravity=1450,jump=640;
-  let ix=0;if(keys.left)ix--;if(keys.right)ix++;
-  if(ix){player.vx=ix*speed;player.dir=ix>0?1:-1}else{player.vx*=.82;if(Math.abs(player.vx)<5)player.vx=0}
-  if(keys.jump&&player.onGround){player.vy=-jump;player.onGround=false}
-  if(keys.attack&&player.attackTime<=0){player.attackTime=.45;player.frame=0;player.anim=0}
-  player.attackTime=Math.max(0,player.attackTime-dt);
-  player.state=player.attackTime>0?'attack':(Math.abs(player.vx)>20?'walk':'idle');
-  player.vy+=gravity*dt;player.x+=player.vx*dt;player.y+=player.vy*dt;
-  const gy=groundY();
-  if(player.y+player.h>=gy){player.y=gy-player.h;player.vy=0;player.onGround=true}
-  player.x=Math.max(40,Math.min(worldW-180,player.x));
-  player.anim+=dt;
-  const fps=player.state==='attack'?10:(player.state==='walk'?8:4);
-  if(player.anim>1/fps){player.anim=0;player.frame=(player.frame+1)%4}
-  camera.x=Math.max(0,Math.min(worldW-innerWidth,player.x-innerWidth*.42));
-}
-function drawBg(){
-  const w=innerWidth,h=innerHeight,gx=-camera.x;
-  const sky=ctx.createLinearGradient(0,0,0,h);
-  sky.addColorStop(0,'#7dd3fc');sky.addColorStop(.55,'#dbeafe');sky.addColorStop(.56,'#84cc16');sky.addColorStop(1,'#365314');
-  ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
-  ctx.fillStyle='rgba(255,255,255,.65)';
-  for(let i=0;i<8;i++){const x=(i*360+120+gx*.25)%(w+420)-220,y=70+(i%3)*44;ctx.beginPath();ctx.ellipse(x,y,70,24,0,0,Math.PI*2);ctx.ellipse(x+48,y+8,48,18,0,0,Math.PI*2);ctx.ellipse(x-45,y+6,45,16,0,0,Math.PI*2);ctx.fill()}
-  ctx.fillStyle='#4d7c0f';ctx.fillRect(gx,groundY(),worldW,110);
-  ctx.fillStyle='#713f12';for(let x=0;x<worldW;x+=160)ctx.fillRect(gx+x,groundY()+20,110,18);
-  ctx.fillStyle='#1f2937';for(let x=420;x<worldW;x+=520){ctx.fillRect(gx+x,groundY()-60,180,60);ctx.fillStyle='#374151';ctx.fillRect(gx+x+14,groundY()-90,152,34);ctx.fillStyle='#1f2937'}
-}
-function drawPlayer(){
-  const img=player.state==='attack'?imgs.attack:imgs.walk;
-  if(!img){ctx.fillStyle='#111827';ctx.fillRect(player.x-camera.x,player.y,player.w,player.h);return}
-  const f=frameRect(player.frame,img);
-  const drawW=player.state==='attack'?player.w*1.65:player.w;
-  const drawH=player.state==='attack'?player.h*1.18:player.h;
-  const footY=player.y+player.h;
-  const dx=player.x-camera.x-(drawW-player.w)/2;
-  const dy=footY-drawH;
-  ctx.save();
-  if(player.dir<0){ctx.translate(dx+drawW,dy);ctx.scale(-1,1);ctx.drawImage(img,f.sx,f.sy,f.sw,f.sh,0,0,drawW,drawH)}
-  else ctx.drawImage(img,f.sx,f.sy,f.sw,f.sh,dx,dy,drawW,drawH);
-  ctx.restore();
-}
-let last=performance.now();
-function loop(now){const dt=Math.min(.033,(now-last)/1000);last=now;update(dt);drawBg();drawPlayer();requestAnimationFrame(loop)}
-Promise.all([loadImage('walk','play/playhoko.png'),loadImage('attack','play/playatk.png')]).then(()=>{player.y=groundY()-player.h;requestAnimationFrame(loop)});
-</script>
-</body>
-</html>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');function resize(){canvas.width=Math.floor(innerWidth*devicePixelRatio);canvas.height=Math.floor(innerHeight*devicePixelRatio);canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px';ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}addEventListener('resize',resize);resize();
+const imgs={};function loadImage(k,src){return new Promise(r=>{const img=new Image();img.onload=()=>{imgs[k]=img;r()};img.onerror=()=>{console.warn('画像読み込み失敗',src);r()};img.src=src})}
+const keys={left:false,right:false,jump:false,attack:false};let attackPressed=false;addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=true;if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=true;if(e.key===' '||e.key==='ArrowUp'||e.key==='w'||e.key==='W')keys.jump=true;if(e.key==='j'||e.key==='J')keys.attack=true});addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')keys.left=false;if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')keys.right=false;if(e.key===' '||e.key==='ArrowUp'||e.key==='w'||e.key==='W')keys.jump=false;if(e.key==='j'||e.key==='J')keys.attack=false});
+function bind(id,k){const b=document.getElementById(id);b.onpointerdown=e=>{e.preventDefault();keys[k]=true;b.setPointerCapture(e.pointerId)};b.onpointerup=e=>{e.preventDefault();keys[k]=false};b.onpointercancel=()=>keys[k]=false;b.onpointerleave=()=>keys[k]=false}bind('leftBtn','left');bind('rightBtn','right');bind('jumpBtn','jump');bind('atkBtn','attack');
+const player={x:160,y:0,vx:0,vy:0,w:150,h:150,dir:1,onGround:false,state:'idle',frame:0,anim:0,combo:0,attackTime:0,comboBuffer:false,lastAttackEnd:999};const camera={x:0},worldW=2800,groundY=()=>innerHeight-110;const enemies=[{x:620,y:0,w:90,h:120,hp:100,shock:0,hitFlash:0},{x:980,y:0,w:90,h:120,hp:100,shock:0,hitFlash:0},{x:1380,y:0,w:90,h:120,hp:100,shock:0,hitFlash:0}];let effects=[];
+function frameRect(frame,img){const fw=img.width/2,fh=img.height/2,col=frame%2,row=Math.floor(frame/2);return{sx:col*fw,sy:row*fh,sw:fw,sh:fh}}function rectsHit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}function attackDuration(c){return c===1?.26:c===2?.34:.52}
+function startAttack(){if(player.attackTime>0){player.comboBuffer=true;return}if(player.lastAttackEnd>.55)player.combo=0;player.combo=player.combo%3+1;player.attackTime=attackDuration(player.combo);player.comboBuffer=false;player.frame=0;player.anim=0;doHitCheck(player.combo);if(player.combo===3)spawnThunder()}
+function doHitCheck(c){const range=c===3?230:c===2?190:155;const hit={x:player.dir>0?player.x+player.w*.45:player.x-range+player.w*.55,y:player.y+20,w:range,h:player.h*.75};enemies.forEach(e=>{if(e.hp<=0)return;if(rectsHit(hit,e)){e.hp-=c===1?15:c===2?28:40;e.hitFlash=.15;if(c===3)e.shock=1.4;if(c===2)e.shock=.45}})}function spawnThunder(){const baseX=player.x+player.dir*120;effects.push({type:'thunder',x:baseX-115,y:groundY()-360,t:.42});effects.push({type:'thunder',x:baseX+115,y:groundY()-360,t:.42})}
+function update(dt){const speed=270,gravity=1450,jump=640;if(keys.attack&&!attackPressed){startAttack();attackPressed=true}if(!keys.attack)attackPressed=false;let ix=0;if(keys.left)ix--;if(keys.right)ix++;if(player.attackTime<=0){if(ix){player.vx=ix*speed;player.dir=ix>0?1:-1}else{player.vx*=.82;if(Math.abs(player.vx)<5)player.vx=0}}else player.vx*=.74;if(keys.jump&&player.onGround){player.vy=-jump;player.onGround=false}player.vy+=gravity*dt;player.x+=player.vx*dt;player.y+=player.vy*dt;const gy=groundY();if(player.y+player.h>=gy){player.y=gy-player.h;player.vy=0;player.onGround=true}player.x=Math.max(40,Math.min(worldW-180,player.x));if(player.attackTime>0){player.attackTime-=dt;player.state='attack';if(player.attackTime<=0){player.attackTime=0;player.lastAttackEnd=0;if(player.comboBuffer)startAttack()}}else{player.lastAttackEnd+=dt;player.state=Math.abs(player.vx)>20?'walk':'idle'}player.anim+=dt;const fps=player.state==='attack'?(player.combo===1?16:12):(player.state==='walk'?8:4);if(player.anim>1/fps){player.anim=0;player.frame=(player.frame+1)%4}enemies.forEach(e=>{e.y=groundY()-e.h;e.shock=Math.max(0,e.shock-dt);e.hitFlash=Math.max(0,e.hitFlash-dt)});effects.forEach(e=>e.t-=dt);effects=effects.filter(e=>e.t>0);camera.x=Math.max(0,Math.min(worldW-innerWidth,player.x-innerWidth*.42))}
+function drawBg(){const w=innerWidth,h=innerHeight,gx=-camera.x,sky=ctx.createLinearGradient(0,0,0,h);sky.addColorStop(0,'#7dd3fc');sky.addColorStop(.55,'#dbeafe');sky.addColorStop(.56,'#84cc16');sky.addColorStop(1,'#365314');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);ctx.fillStyle='rgba(255,255,255,.65)';for(let i=0;i<8;i++){const x=(i*360+120+gx*.25)%(w+420)-220,y=70+(i%3)*44;ctx.beginPath();ctx.ellipse(x,y,70,24,0,0,Math.PI*2);ctx.ellipse(x+48,y+8,48,18,0,0,Math.PI*2);ctx.ellipse(x-45,y+6,45,16,0,0,Math.PI*2);ctx.fill()}ctx.fillStyle='#4d7c0f';ctx.fillRect(gx,groundY(),worldW,110);ctx.fillStyle='#713f12';for(let x=0;x<worldW;x+=160)ctx.fillRect(gx+x,groundY()+20,110,18);ctx.fillStyle='#1f2937';for(let x=420;x<worldW;x+=520){ctx.fillRect(gx+x,groundY()-60,180,60);ctx.fillStyle='#374151';ctx.fillRect(gx+x+14,groundY()-90,152,34);ctx.fillStyle='#1f2937'}}
+function drawEnemies(){enemies.forEach(e=>{if(e.hp<=0)return;const x=e.x-camera.x,y=e.y;ctx.save();if(e.shock>0){ctx.translate((Math.random()-.5)*6,(Math.random()-.5)*4);ctx.strokeStyle='rgba(255,240,80,.9)';ctx.lineWidth=3;for(let i=0;i<4;i++){const px=x+15+Math.random()*(e.w-30);ctx.beginPath();ctx.moveTo(px,y+10);ctx.lineTo(px+12,y+35);ctx.lineTo(px-5,y+70);ctx.stroke()}}ctx.fillStyle=e.hitFlash>0?'#fff36b':'#7f1d1d';ctx.fillRect(x,y,e.w,e.h);ctx.fillStyle='#111827';ctx.fillRect(x+20,y+24,16,16);ctx.fillRect(x+54,y+24,16,16);ctx.fillStyle='#000';ctx.fillRect(x,y-12,e.w,7);ctx.fillStyle='#22c55e';ctx.fillRect(x,y-12,e.w*Math.max(0,e.hp/100),7);ctx.restore()})}
+function drawSlashAura(){if(player.state!=='attack'||player.combo!==2)return;const p=1-player.attackTime/attackDuration(2),x=player.x-camera.x+player.w/2+player.dir*(50+p*55),y=player.y+65;ctx.save();ctx.globalAlpha=.55*(1-p);ctx.strokeStyle='rgba(255,20,40,.95)';ctx.lineWidth=18;ctx.beginPath();ctx.arc(x,y,55+p*40,player.dir>0?-1.2:Math.PI+1.2,player.dir>0?.8:Math.PI-.8);ctx.stroke();ctx.globalAlpha=.35*(1-p);ctx.strokeStyle='rgba(255,120,120,.9)';ctx.lineWidth=34;ctx.beginPath();ctx.arc(x,y,35+p*55,player.dir>0?-1.0:Math.PI+1.0,player.dir>0?.7:Math.PI-.7);ctx.stroke();ctx.restore()}
+function drawPlayerElectric(){if(player.state!=='attack'||player.combo!==3)return;ctx.save();ctx.strokeStyle='rgba(255,245,90,.85)';ctx.lineWidth=2;const bx=player.x-camera.x,by=player.y;for(let i=0;i<5;i++){const x=bx+35+Math.random()*80,y=by+20+Math.random()*100;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+8,y+14);ctx.lineTo(x-3,y+30);ctx.stroke()}ctx.restore()}
+function drawEffects(){effects.forEach(e=>{if(e.type==='thunder'){const x=e.x-camera.x,y=e.y,alpha=Math.min(1,e.t/.25);if(imgs.thunder){ctx.save();ctx.globalAlpha=alpha;ctx.drawImage(imgs.thunder,x-70,y,140,360);ctx.restore()}else{ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle='#fff36b';ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+30,y+95);ctx.lineTo(x-8,y+170);ctx.lineTo(x+42,y+260);ctx.lineTo(x,y+360);ctx.stroke();ctx.restore()}}})}
+function drawPlayer(){const img=player.state==='attack'?imgs.attack:imgs.walk;if(!img){ctx.fillStyle='#111827';ctx.fillRect(player.x-camera.x,player.y,player.w,player.h);return}const f=frameRect(player.frame,img);let drawW=player.w,drawH=player.h;if(player.state==='attack'){drawW=player.combo===1?player.w*1.52:player.combo===2?player.w*1.68:player.w*1.72;drawH=player.combo===1?player.h*1.12:player.combo===2?player.h*1.16:player.h*1.2}const footY=player.y+player.h,dx=player.x-camera.x-(drawW-player.w)/2,dy=footY-drawH;ctx.save();if(player.dir<0){ctx.translate(dx+drawW,dy);ctx.scale(-1,1);ctx.drawImage(img,f.sx,f.sy,f.sw,f.sh,0,0,drawW,drawH)}else ctx.drawImage(img,f.sx,f.sy,f.sw,f.sh,dx,dy,drawW,drawH);ctx.restore();drawPlayerElectric()}
+let last=performance.now();function loop(now){const dt=Math.min(.033,(now-last)/1000);last=now;update(dt);drawBg();drawEffects();drawEnemies();drawSlashAura();drawPlayer();requestAnimationFrame(loop)}Promise.all([loadImage('walk','play/playhoko.png'),loadImage('attack','play/playatk.png'),loadImage('thunder','ef/efthunder.png')]).then(()=>{player.y=groundY()-player.h;requestAnimationFrame(loop)});
+</script></body></html>
