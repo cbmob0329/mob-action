@@ -161,6 +161,31 @@ function frameRect(def,frame){
   };
 }
 
+function frame4(img, frame){
+  if(!img)return {sx:0,sy:0,sw:1,sh:1};
+  const fw=img.width/2;
+  const fh=img.height/2;
+  const f=Math.max(0,Math.min(3,Math.floor(frame)))%4;
+  const col=f%2;
+  const row=Math.floor(f/2);
+  return {sx:col*fw, sy:row*fh, sw:fw, sh:fh};
+}
+
+function drawSheet4(key, frame, x, y, w, h){
+  const img=imgs[key];
+  if(!img){
+    if(key.includes('bara')){
+      ctx.fillStyle='#ff4db8';
+      ctx.beginPath();
+      ctx.arc(x+w/2,y+h/2,Math.min(w,h)/2,0,Math.PI*2);
+      ctx.fill();
+    }
+    return;
+  }
+  const f=frame4(img, frame);
+  ctx.drawImage(img,f.sx,f.sy,f.sw,f.sh,x,y,w,h);
+}
+
 function currentDef(){
   if(player.action==='normal'){
     if(player.combo===1)return SPR.atk1;
@@ -243,9 +268,9 @@ function applyNormalHit(){
 
 function spawnRaigekiEffects(){
   const baseX=player.x+player.w/2+player.dir*135;
-  effects.push({type:'groundThunder',x:baseX,y:groundY()-22,t:.55,total:.55});
-  effects.push({type:'thunderColumn',x:baseX-125,y:groundY()-360,t:.48,total:.48});
-  effects.push({type:'thunderColumn',x:baseX+125,y:groundY()-360,t:.48,total:.48});
+  effects.push({type:'groundThunder',x:baseX,y:groundY()-22,t:.55,total:.55,frame:0,anim:0});
+  effects.push({type:'thunderColumn',x:baseX-125,y:groundY()-360,t:.48,total:.48,frame:0,anim:0});
+  effects.push({type:'thunderColumn',x:baseX+125,y:groundY()-360,t:.48,total:.48,frame:0,anim:0});
 
   const a1={x:baseX-185,y:groundY()-360,w:120,h:360};
   const a2={x:baseX+65,y:groundY()-360,w:120,h:360};
@@ -288,13 +313,15 @@ function fireBara(power){
     vx:player.dir*speed,
     power,
     life:2.4,
+    anim:0,
+    frame:0,
     hit:false
   });
 }
 
 function explodeBara(x,y,power){
   const r=70+power*48;
-  effects.push({type:'baraExplosion',x,y,r,t:.48,total:.48});
+  effects.push({type:'baraExplosion',x,y,r,t:.48,total:.48,frame:0,anim:0});
   const area={x:x-r,y:y-r,w:r*2,h:r*2};
   enemies.forEach(e=>{
     if(!e.alive)return;
@@ -407,6 +434,11 @@ function updateWorld(dt){
   projectiles.forEach(p=>{
     p.x+=p.vx*dt;
     p.life-=dt;
+    p.anim+=dt;
+    if(p.anim>1/12){
+      p.anim=0;
+      p.frame=(p.frame+1)%4;
+    }
     enemies.forEach(e=>{
       if(!e.alive||p.hit)return;
       if(rectHit(p,e)){
@@ -421,7 +453,14 @@ function updateWorld(dt){
   });
   projectiles=projectiles.filter(p=>!p.hit);
 
-  effects.forEach(e=>e.t-=dt);
+  effects.forEach(e=>{
+    e.t-=dt;
+    e.anim=(e.anim||0)+dt;
+    if(e.anim>1/12){
+      e.anim=0;
+      e.frame=((e.frame||0)+1)%4;
+    }
+  });
   effects=effects.filter(e=>e.t>0);
 }
 
@@ -536,7 +575,7 @@ function drawChargeEnergy(){
 
   ctx.save();
   if(hasImg('bara')){
-    ctx.drawImage(imgs.bara,x,y,s,s);
+    drawSheet4('bara', Math.floor(performance.now()/90)%4, x, y, s, s);
   }else{
     const g=ctx.createRadialGradient(x+s/2,y+s/2,5,x+s/2,y+s/2,s/2);
     g.addColorStop(0,'#fff');
@@ -572,14 +611,7 @@ function drawPlayer(){
 function drawProjectiles(){
   projectiles.forEach(p=>{
     const x=p.x-camera.x,y=p.y;
-    if(hasImg('bara')){
-      ctx.drawImage(imgs.bara,x,y,p.w,p.h);
-    }else{
-      ctx.fillStyle='#ff4db8';
-      ctx.beginPath();
-      ctx.arc(x+p.w/2,y+p.h/2,p.w/2,0,Math.PI*2);
-      ctx.fill();
-    }
+    drawSheet4('bara', p.frame||0, x, y, p.w, p.h);
   });
 }
 
@@ -592,7 +624,7 @@ function drawEffects(){
 
     if(e.type==='thunderColumn'){
       if(hasImg('thunderAtk')){
-        ctx.drawImage(imgs.thunderAtk,x-70,y,140,360);
+        drawSheet4('thunderAtk', e.frame||0, x-70, y, 140, 360);
       }else{
         ctx.strokeStyle='#fff36b';
         ctx.lineWidth=10;
@@ -608,7 +640,7 @@ function drawEffects(){
 
     if(e.type==='groundThunder'){
       if(hasImg('thunderGround')){
-        ctx.drawImage(imgs.thunderGround,x-170,y-95,340,120);
+        drawSheet4('thunderGround', e.frame||0, x-170, y-95, 340, 120);
       }else{
         ctx.fillStyle='rgba(255,240,90,.55)';
         ctx.beginPath();
